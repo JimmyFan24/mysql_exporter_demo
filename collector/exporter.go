@@ -26,14 +26,13 @@ const (
 	sessionSettingsParam = `log_slow_filter=%27tmp_table_on_disk,filesort_on_disk%27`
 	timeoutParam         = `lock_wait_timeout=%d`
 )
-// Exporter collects MySQL metrics. It implements prometheus.Collector.
 
+// Exporter collects MySQL metrics. It implements prometheus.Collector.
 
 //Flags
 var (
-	exporterLockTimeout = pflag.Int("exporter.lock_wait_timeout",2,"Set a lock_wait_timeout (in seconds) on the connection to avoid long metadata locking.")
-	slowLogFilter = pflag.Bool("exporter.log_slow_filter",false,"Add a log_slow_filter to avoid slow query logging of scrapes. NOTE: Not supported by Oracle MySQL.")
-
+	exporterLockTimeout = pflag.Int("exporter.lock_wait_timeout", 2, "Set a lock_wait_timeout (in seconds) on the connection to avoid long metadata locking.")
+	slowLogFilter       = pflag.Bool("exporter.log_slow_filter", false, "Add a log_slow_filter to avoid slow query logging of scrapes. NOTE: Not supported by Oracle MySQL.")
 )
 var (
 	versionRE = regexp.MustCompile(`^\d+\.\d+`)
@@ -47,12 +46,13 @@ var (
 		[]string{"collector"}, nil,
 	)
 )
+
 type Exporter struct {
-	ctx context.Context
-	logger log.Logger
-	dsn string
+	ctx      context.Context
+	logger   log.Logger
+	dsn      string
 	scrapers []Scraper
-	metrics Metrics
+	metrics  Metrics
 }
 
 func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
@@ -100,7 +100,10 @@ func (e *Exporter) scrape(ctx context.Context, ch chan<- prometheus.Metric) {
 	e.metrics.MySQLUp.Set(1)
 	e.metrics.Error.Set(0)
 
-	ch <- prometheus.MustNewConstMetric(scrapeDurationDesc, prometheus.GaugeValue, time.Since(scrapeTime).Seconds(), "connection")
+	ch <- prometheus.MustNewConstMetric(scrapeDurationDesc,
+		prometheus.GaugeValue,
+		time.Since(scrapeTime).Seconds(),
+		"connection")
 
 	version := getMySQLVersion(db, e.logger)
 	var wg sync.WaitGroup
@@ -115,8 +118,8 @@ func (e *Exporter) scrape(ctx context.Context, ch chan<- prometheus.Metric) {
 			defer wg.Done()
 			label := "collect." + scraper.Name()
 			scrapeTime := time.Now()
-			if err := scraper.Scrape(ctx, db, ch, log.With(e.logger,"scraper", scraper.Name())); err != nil {
-				logrus.Errorf("Error from scraper:%v,err:%v",scraper.Name(),err)
+			if err := scraper.Scrape(ctx, db, ch, log.With(e.logger, "scraper", scraper.Name())); err != nil {
+				logrus.Errorf("Error from scraper:%v,err:%v", scraper.Name(), err)
 				e.metrics.ScrapeErrors.WithLabelValues(label).Inc()
 				e.metrics.Error.Set(1)
 			}
@@ -125,18 +128,18 @@ func (e *Exporter) scrape(ctx context.Context, ch chan<- prometheus.Metric) {
 	}
 }
 
-func getMySQLVersion(db *sql.DB, logger log.Logger) float64{
+func getMySQLVersion(db *sql.DB, logger log.Logger) float64 {
 	var versionStr string
 	var versionNum float64
 	if err := db.QueryRow(versionQuery).Scan(&versionStr); err == nil {
 		versionNum, _ = strconv.ParseFloat(versionRE.FindString(versionStr), 64)
 	} else {
-		logrus.Debugf("Error querying version:%v",err)
+		logrus.Debugf("Error querying version:%v", err)
 
 	}
 	// If we can't match/parse the version, set it some big value that matches all versions.
 	if versionNum == 0 {
-		logrus.Debugf("Error parsing version string:%v",versionStr)
+		logrus.Debugf("Error parsing version string:%v", versionStr)
 		versionNum = 999
 	}
 	return versionNum
@@ -148,8 +151,8 @@ var _ prometheus.Collector = (*Exporter)(nil)
 type Metrics struct {
 	TotalScrapes prometheus.Counter
 	ScrapeErrors *prometheus.CounterVec
-	Error prometheus.Gauge
-	MySQLUp prometheus.Gauge
+	Error        prometheus.Gauge
+	MySQLUp      prometheus.Gauge
 }
 
 const (
@@ -157,7 +160,7 @@ const (
 )
 
 // NewMetrics creates new Metrics instance.
-func NewMetrics() Metrics{
+func NewMetrics() Metrics {
 	subsystem := exporter
 	return Metrics{
 		TotalScrapes: prometheus.NewCounter(prometheus.CounterOpts{
@@ -184,27 +187,26 @@ func NewMetrics() Metrics{
 			Help:      "Whether the MySQL server is up.",
 		}),
 	}
-	}
+}
 
 // New returns a new MySQL exporter for the provided DSN.
 
-func New(ctx context.Context,dsn string,metrics Metrics,scrapers []Scraper,logger log.Logger)*Exporter{
+func New(ctx context.Context, dsn string, metrics Metrics, scrapers []Scraper, logger log.Logger) *Exporter {
 	// Setup extra params for the DSN, default to having a lock timeout.
 	fmt.Println(dsn)
 	dsnParams := []string{fmt.Sprintf(timeoutParam, *exporterLockTimeout)}
 
-
-	if *slowLogFilter{
-		dsnParams = append(dsnParams,sessionSettingsParam)
+	if *slowLogFilter {
+		dsnParams = append(dsnParams, sessionSettingsParam)
 	}
 
-	if strings.Contains(dsn,"?"){
+	if strings.Contains(dsn, "?") {
 		dsn = dsn + "&"
-	}else {
+	} else {
 		dsn = dsn + "?"
 	}
 
-	dsn += strings.Join(dsnParams,"&")
+	dsn += strings.Join(dsnParams, "&")
 	return &Exporter{
 		ctx:      ctx,
 		logger:   logger,
